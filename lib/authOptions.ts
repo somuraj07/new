@@ -1,17 +1,16 @@
-// lib/authOptions.ts
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
-import prisma from "@/lib/db";
+import prismaWrite from "@/lib/prisma-write"; // primary
+// import prismaRead from "@/lib/prisma-read"; // optional for replica
 import bcrypt from "bcrypt";
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma),
+  adapter: PrismaAdapter(prismaWrite), // always primary
 
   providers: [
     CredentialsProvider({
       name: "Credentials",
-
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
@@ -20,28 +19,22 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        // Get user by email
-        const user = await prisma.user.findUnique({
+        // For login, read from primary to avoid replica lag
+        const user = await prismaWrite.user.findUnique({
           where: { email: credentials.email },
-          include: {
-            student: true,
-            assignedClasses: true,
-            school: true,
-          },
+          include: { student: true, assignedClasses: true, school: true },
         });
 
         if (!user || !user.password) return null;
 
-        // Compare password
         const isValid = await bcrypt.compare(credentials.password, user.password);
         if (!isValid) return null;
 
-        // This gets returned into the JWT callback
         return {
           id: user.id,
           name: user.name,
           email: user.email,
-          role: user.role,              // SUPER_ADMIN | ADMIN | TEACHER | STUDENT
+          role: user.role,
           schoolId: user.schoolId,
           mobile: user.mobile,
           studentId: user.student?.id || null,
@@ -56,7 +49,7 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
-        token.role = user.role;              // stores SUPER_ADMIN
+        token.role = user.role;
         token.schoolId = user.schoolId;
         token.mobile = user.mobile;
         token.studentId = user.studentId;

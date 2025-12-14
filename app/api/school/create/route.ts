@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
-import prisma from "@/lib/db";
+import prismaRead from "@/lib/prisma-read";   // replica
+import prismaWrite from "@/lib/prisma-write"; // primary
 
 export async function POST(req: Request) {
   try {
@@ -27,8 +28,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // 🔍 CHECK: Does admin already have a school?
-    const existingSchool = await prisma.school.findFirst({
+    // ✅ READ from replica
+    const existingSchool = await prismaRead.school.findFirst({
       where: {
         admins: {
           some: { id: session.user.id },
@@ -47,8 +48,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // 🆕 CREATE school
-    const school = await prisma.school.create({
+    // ✅ WRITE → PRIMARY
+    const school = await prismaWrite.school.create({
       data: {
         name,
         address,
@@ -59,14 +60,20 @@ export async function POST(req: Request) {
       },
     });
 
+    // ⚠️ Immediate read-after-write → PRIMARY
+    const freshSchool = await prismaWrite.school.findUnique({
+      where: { id: school.id },
+      include: { admins: true },
+    });
+
     // ➕ update user's schoolId
-    await prisma.user.update({
+    await prismaWrite.user.update({
       where: { id: session.user.id },
-      data: { schoolId: school.id },
+      data: { schoolId: freshSchool?.id },
     });
 
     return NextResponse.json(
-      { message: "School created successfully", school },
+      { message: "School created successfully", school: freshSchool },
       { status: 201 }
     );
 

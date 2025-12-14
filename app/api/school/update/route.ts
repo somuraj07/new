@@ -1,19 +1,21 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
-import prisma from "@/lib/db";
+import prismaWrite from "@/lib/prisma-write"; // ✅ use primary for writes
 
 export async function PUT(req: Request) {
   try {
     const session = await getServerSession(authOptions);
-    const { name,address,location} = await req.json();
+    const { name, address, location } = await req.json();
 
-    if (!session) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (!session)
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     if (session.user.role !== "SCHOOLADMIN")
       return NextResponse.json({ message: "Forbidden" }, { status: 403 });
 
-    const user = await prisma.user.findUnique({
+    // Read user's schoolId from primary (optional: read from replica if acceptable)
+    const user = await prismaWrite.user.findUnique({
       where: { id: session.user.id },
     });
 
@@ -24,9 +26,10 @@ export async function PUT(req: Request) {
       );
     }
 
-    const updated = await prisma.school.update({
+    // ✅ UPDATE school on primary
+    const updated = await prismaWrite.school.update({
       where: { id: user.schoolId },
-      data: { name,address,location },
+      data: { name, address, location },
     });
 
     return NextResponse.json(
@@ -34,6 +37,7 @@ export async function PUT(req: Request) {
       { status: 200 }
     );
   } catch (error) {
+    console.error("School update error:", error);
     return NextResponse.json(
       { message: "Error updating school" },
       { status: 500 }
