@@ -47,7 +47,7 @@ export default function LoginPage() {
         break;
       case "TEACHER":
       case "STUDENT":
-        router.push("/");
+        router.push("/student");
         break;
       default:
         router.push("/unauthorized");

@@ -39,9 +39,21 @@ model User {
   attendances     Attendance[] @relation("TeacherAttendance")
   marks           Mark[] @relation("TeacherMarks")
   events          Event[]
+  homeworks       Homework[] @relation("HomeworkCreator")
 
   // Student-specific fields
   student Student?
+
+  // News Feed
+  newsFeedsCreated NewsFeed[] @relation("NewsFeedCreator")
+
+  // Certificates
+  certificateTemplatesCreated CertificateTemplate[] @relation("CertificateTemplateCreator")
+  certificatesIssued Certificate[] @relation("CertificateIssuer")
+
+  // Transfer Certificate
+  tcRequests TransferCertificate[] @relation("TCRequester")
+  tcApprovals TransferCertificate[] @relation("TCApprover")
 
   // NextAuth
   accounts Account[]
@@ -66,6 +78,12 @@ model School {
   students Student[]
   classes  Class[]
   events   Event[]
+  newsFeeds NewsFeed[]
+  homeworks Homework[]
+  certificateTemplates CertificateTemplate[]
+  certificates Certificate[]
+  transferCertificates TransferCertificate[]
+  studentHistories StudentHistory[]
 
   createdAt DateTime @default(now())
 
@@ -87,6 +105,7 @@ model Class {
   attendances Attendance[]
   marks       Mark[]
   events      Event[]
+  homeworks   Homework[]
 
   createdAt DateTime @default(now())
 }
@@ -117,6 +136,9 @@ model Student {
   attendances        Attendance[]
   marks              Mark[]
   eventRegistrations EventRegistration[]
+  homeworkSubmissions HomeworkSubmission[]
+  certificates       Certificate[]
+  transferCertificates TransferCertificate[]
 
   createdAt DateTime @default(now())
 }
@@ -272,5 +294,196 @@ model EventRegistration {
   @@unique([eventId, studentId])
   @@index([studentId])
   @@index([eventId])
+}
+
+// =====================
+// News Feed Model
+// =====================
+
+model NewsFeed {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @db.Text
+  mediaUrl    String?  // Photo or video URL
+  mediaType   String?  // "PHOTO", "VIDEO", null
+  
+  // Relations
+  schoolId String
+  school   School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  
+  createdById String
+  createdBy   User     @relation("NewsFeedCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([schoolId])
+  @@index([createdById])
+}
+
+// =====================
+// Homework Model
+// =====================
+
+model Homework {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @db.Text
+  subject     String
+  dueDate     DateTime?
+  
+  // Relations
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  
+  teacherId String
+  teacher   User     @relation("HomeworkCreator", fields: [teacherId], references: [id], onDelete: Cascade)
+  
+  schoolId String
+  school   School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  
+  submissions HomeworkSubmission[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([classId])
+  @@index([teacherId])
+  @@index([schoolId])
+}
+
+model HomeworkSubmission {
+  id        String   @id @default(cuid())
+  content   String?  @db.Text // Student's submission content
+  fileUrl   String?  // Optional file attachment
+  
+  // Relations
+  homeworkId String
+  homework   Homework @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  
+  submittedAt DateTime @default(now())
+  graded      Boolean  @default(false)
+  grade       String?  // Optional grade/feedback
+  
+  @@unique([homeworkId, studentId])
+  @@index([studentId])
+  @@index([homeworkId])
+}
+
+// =====================
+// Certificates Model
+// =====================
+
+model CertificateTemplate {
+  id          String   @id @default(cuid())
+  name        String   // Template name (e.g., "Academic Excellence", "Sports Achievement")
+  description String?  @db.Text
+  template    String   @db.Text // HTML/JSON template content
+  imageUrl    String?  // Template background image
+  
+  // Relations
+  schoolId String
+  school   School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  
+  createdById String
+  createdBy   User     @relation("CertificateTemplateCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  
+  certificates Certificate[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([schoolId])
+}
+
+model Certificate {
+  id          String   @id @default(cuid())
+  title       String   // Certificate title
+  description String?  @db.Text
+  issuedDate  DateTime @default(now())
+  
+  // Relations
+  templateId String
+  template   CertificateTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  
+  issuedById String
+  issuedBy   User     @relation("CertificateIssuer", fields: [issuedById], references: [id], onDelete: Cascade)
+  
+  schoolId String
+  school   School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  
+  certificateUrl String? // Generated certificate PDF/image URL
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([studentId])
+  @@index([templateId])
+  @@index([schoolId])
+}
+
+// =====================
+// Transfer Certificate (TC) Model
+// =====================
+
+model TransferCertificate {
+  id          String   @id @default(cuid())
+  reason      String?  @db.Text // Reason for TC request
+  status      String   @default("PENDING") // "PENDING", "APPROVED", "REJECTED", "ISSUED"
+  issuedDate  DateTime?
+  
+  // Relations
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  
+  requestedById String? // Student who requested (if self-requested)
+  requestedBy   User?   @relation("TCRequester", fields: [requestedById], references: [id], onDelete: SetNull)
+  
+  approvedById String?
+  approvedBy   User?   @relation("TCApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  
+  schoolId String
+  school   School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  
+  tcDocumentUrl String? // Generated TC document URL
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([studentId])
+  @@index([schoolId])
+  @@index([status])
+}
+
+// =====================
+// Student History (for deactivated students)
+// =====================
+
+model StudentHistory {
+  id        String   @id @default(cuid())
+  
+  // Store all student data as JSON for history
+  studentData Json   @db.JsonB // Complete student record
+  
+  // Relations
+  originalStudentId String   @unique // Reference to original student ID
+  schoolId          String
+  school            School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  
+  deactivatedAt DateTime @default(now())
+  deactivatedBy String?  // Admin user ID who deactivated
+  
+  reason String?  @db.Text // Reason for deactivation (TC, etc.)
+  
+  createdAt DateTime @default(now())
+  
+  @@index([schoolId])
+  @@index([originalStudentId])
 }
 

@@ -7,7 +7,7 @@ export async function PUT(req: Request) {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session || session.user.role !== "SCHOOLADMIN") {
+    if (!session) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 

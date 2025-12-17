@@ -11,12 +11,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    if (session.user.role !== "SCHOOLADMIN") {
-      return NextResponse.json(
-        { message: "Only School Admins can create a school" },
-        { status: 403 }
-      );
-    }
 
     const { name, address, location } = await req.json();
 

@@ -13,6 +13,10 @@ interface Mark {
   createdAt: string;
   class: { id: string; name: string; section: string | null };
   teacher?: { id: string; name: string | null; email: string | null };
+  student?: {
+    id: string;
+    user: { id: string; name: string | null; email: string | null };
+  };
 }
 
 export default function ViewMarksPage() {
@@ -136,6 +140,9 @@ export default function ViewMarksPage() {
               <table className="w-full">
                 <thead className="bg-green-600 text-white">
                   <tr>
+                    {session.user.role !== "STUDENT" && (
+                      <th className="px-4 py-3 text-left">Student</th>
+                    )}
                     <th className="px-4 py-3 text-left">Subject</th>
                     <th className="px-4 py-3 text-left">Marks</th>
                     <th className="px-4 py-3 text-left">Total</th>
@@ -151,6 +158,11 @@ export default function ViewMarksPage() {
                 <tbody className="divide-y divide-gray-200">
                   {marks.map((mark) => (
                     <tr key={mark.id} className="hover:bg-green-50">
+                      {session.user.role !== "STUDENT" && (
+                        <td className="px-4 py-3 font-medium">
+                          {mark.student?.user?.name || "N/A"}
+                        </td>
+                      )}
                       <td className="px-4 py-3 font-medium">{mark.subject}</td>
                       <td className="px-4 py-3">{mark.marks}</td>
                       <td className="px-4 py-3">{mark.totalMarks}</td>

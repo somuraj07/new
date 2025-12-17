@@ -11,8 +11,6 @@ export async function PUT(req: Request) {
     if (!session)
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-    if (session.user.role !== "SCHOOLADMIN")
-      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
 
     // Read user's schoolId from primary (optional: read from replica if acceptable)
     const user = await prisma.user.findUnique({

@@ -29,14 +29,7 @@ export async function GET(req: Request) {
     };
 
     // For students: show events for their class
-    if (session.user.role === "STUDENT") {
-      if (!session.user.studentId) {
-        return NextResponse.json(
-          { message: "Student record not found" },
-          { status: 400 }
-        );
-      }
-
+    if (session.user.studentId) {
       const student = await prisma.student.findUnique({
         where: { id: session.user.studentId },
         select: { classId: true },
@@ -50,18 +43,14 @@ export async function GET(req: Request) {
       } else {
         where.classId = null; // Only school-wide events
       }
-    }
-
-    // For teachers: show all events in their school (their own + school-wide + any class events)
-    if (session.user.role === "TEACHER") {
-      if (teacherId && teacherId === session.user.id) {
-        where.teacherId = session.user.id;
+    } else {
+      // For teachers/admins: can filter by class or teacher
+      if (classId) {
+        where.classId = classId;
       }
-      // Otherwise, show all events in the school (no additional filtering needed)
-    }
-
-    if (classId) {
-      where.classId = classId;
+      if (teacherId) {
+        where.teacherId = teacherId;
+      }
     }
 
     const events = await prisma.event.findMany({
@@ -83,7 +72,7 @@ export async function GET(req: Request) {
     });
 
     // For students, also include registration status
-    if (session.user.role === "STUDENT" && session.user.studentId) {
+    if (session.user.studentId) {
       const eventsWithRegistration = await Promise.all(
         events.map(async (event) => {
           const registration = await prisma.eventRegistration.findUnique({

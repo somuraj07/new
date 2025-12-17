@@ -25,131 +25,52 @@ export async function GET(req: Request) {
       );
     }
 
+    const where: any = {
+      class: {
+        schoolId: schoolId,
+      },
+    };
+
     // For students: only show their own marks
-    if (session.user.role === "STUDENT") {
-      if (!session.user.studentId) {
-        return NextResponse.json(
-          { message: "Student record not found" },
-          { status: 400 }
-        );
-      }
-
-      const where: any = {
-        studentId: session.user.studentId,
-      };
-
-      if (subject) {
-        where.subject = subject;
-      }
-
-      const marks = await prisma.mark.findMany({
-        where,
-        include: {
-          class: {
-            select: { id: true, name: true, section: true },
-          },
-          teacher: {
-            select: { id: true, name: true, email: true },
-          },
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-      });
-
-      return NextResponse.json({ marks }, { status: 200 });
-    }
-
-    // For teachers: show marks for all classes in their school
-    if (session.user.role === "TEACHER") {
-      const where: any = {
-        class: {
-          schoolId: schoolId,
-        },
-        // Show marks given by this teacher OR any marks in their school
-        // Remove teacherId filter to see all marks in school
-      };
-
-      if (classId) {
-        where.classId = classId;
-      }
-
+    if (session.user.studentId) {
+      where.studentId = session.user.studentId;
+    } else {
+      // For teachers/admins: can filter by student or class
       if (studentId) {
         where.studentId = studentId;
       }
-
-      if (subject) {
-        where.subject = subject;
-      }
-
-      const marks = await prisma.mark.findMany({
-        where,
-        include: {
-          student: {
-            include: {
-              user: {
-                select: { id: true, name: true, email: true },
-              },
-            },
-          },
-          class: {
-            select: { id: true, name: true, section: true },
-          },
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-      });
-
-      return NextResponse.json({ marks }, { status: 200 });
-    }
-
-    // For school admin: show all marks in their school
-    if (session.user.role === "SCHOOLADMIN") {
-      const where: any = {
-        class: {
-          schoolId: schoolId,
-        },
-      };
-
       if (classId) {
         where.classId = classId;
       }
-
-      if (studentId) {
-        where.studentId = studentId;
-      }
-
-      if (subject) {
-        where.subject = subject;
-      }
-
-      const marks = await prisma.mark.findMany({
-        where,
-        include: {
-          student: {
-            include: {
-              user: {
-                select: { id: true, name: true, email: true },
-              },
-            },
-          },
-          class: {
-            select: { id: true, name: true, section: true },
-          },
-          teacher: {
-            select: { id: true, name: true, email: true },
-          },
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-      });
-
-      return NextResponse.json({ marks }, { status: 200 });
     }
 
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (subject) {
+      where.subject = subject;
+    }
+
+    const marks = await prisma.mark.findMany({
+      where,
+      include: {
+        student: session.user.studentId ? undefined : {
+          include: {
+            user: {
+              select: { id: true, name: true, email: true },
+            },
+          },
+        },
+        class: {
+          select: { id: true, name: true, section: true },
+        },
+        teacher: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    return NextResponse.json({ marks }, { status: 200 });
   } catch (error: any) {
     console.error("View marks error:", error);
     return NextResponse.json(
