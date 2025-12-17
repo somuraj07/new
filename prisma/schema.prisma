@@ -36,6 +36,9 @@ model User {
   // Teacher-specific fields
   mobile          String? // teacher mobile
   assignedClasses Class[] @relation("TeacherClass")
+  attendances     Attendance[] @relation("TeacherAttendance")
+  marks           Mark[] @relation("TeacherMarks")
+  events          Event[]
 
   // Student-specific fields
   student Student?
@@ -62,6 +65,7 @@ model School {
   teachers User[]    @relation("SchoolTeacher")
   students Student[]
   classes  Class[]
+  events   Event[]
 
   createdAt DateTime @default(now())
 
@@ -79,25 +83,40 @@ model Class {
   teacherId String?
   teacher   User?   @relation("TeacherClass", fields: [teacherId], references: [id])
 
-  students Student[]
+  students    Student[]
+  attendances Attendance[]
+  marks       Mark[]
+  events      Event[]
 
   createdAt DateTime @default(now())
 }
 
 model Student {
-  id     String @id @default(cuid())
+  id        String @id @default(cuid())
+
+  // User relation
   userId String @unique
   user   User   @relation(fields: [userId], references: [id])
 
+  // School & Class
   schoolId String
   school   School @relation(fields: [schoolId], references: [id])
 
   classId String?
   class   Class?  @relation(fields: [classId], references: [id])
 
-  rollNo  String?
-  dob     DateTime?
-  address String?
+  // Student Details
+  fatherName String
+  aadhaarNo  String @unique
+  phoneNo    String
+  rollNo     String?
+  dob        DateTime
+  address    String?
+
+  // Relations
+  attendances        Attendance[]
+  marks              Mark[]
+  eventRegistrations EventRegistration[]
 
   createdAt DateTime @default(now())
 }
@@ -145,3 +164,113 @@ model VerificationToken {
 
   @@unique([identifier, token])
 }
+
+// =====================
+// Attendance Model
+// =====================
+
+model Attendance {
+  id        String   @id @default(cuid())
+  date      DateTime @db.Date
+  period    Int      // 1-8 periods per day
+  status    String   // "PRESENT", "ABSENT", "LATE"
+  
+  // Relations
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  
+  teacherId String
+  teacher   User     @relation("TeacherAttendance", fields: [teacherId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@unique([studentId, classId, date, period])
+  @@index([studentId, date])
+  @@index([classId, date])
+}
+
+// =====================
+// Marks/Grades Model
+// =====================
+
+model Mark {
+  id        String   @id @default(cuid())
+  subject   String
+  marks     Float
+  totalMarks Float
+  grade     String?  // "A+", "A", "B+", "B", "C", "D", "F"
+  suggestions String? @db.Text // Teacher's comments/suggestions
+  
+  // Relations
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  
+  teacherId String
+  teacher   User     @relation("TeacherMarks", fields: [teacherId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([studentId])
+  @@index([classId])
+}
+
+// =====================
+// Events/Workshops Model
+// =====================
+
+model Event {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @db.Text
+  amount      Float?
+  photo       String?  // URL or file path
+  eventDate   DateTime?
+  
+  // Relations
+  classId   String?
+  class     Class?   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  
+  teacherId String
+  teacher   User     @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  
+  schoolId String
+  school   School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  
+  registrations EventRegistration[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([classId])
+  @@index([teacherId])
+}
+
+model EventRegistration {
+  id        String   @id @default(cuid())
+  
+  // Relations
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  
+  // Payment status (for future payment integration)
+  paymentStatus String @default("PENDING") // "PENDING", "PAID", "FAILED"
+  paymentId     String?
+  
+  createdAt DateTime @default(now())
+  
+  @@unique([eventId, studentId])
+  @@index([studentId])
+  @@index([eventId])
+}
+
