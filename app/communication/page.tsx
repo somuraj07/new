@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
-import { io, type Socket } from "socket.io-client";
+import io, { type Socket } from "socket.io-client";
 
 type AppointmentStatus = "PENDING" | "APPROVED" | "REJECTED" | "COMPLETED";
 
