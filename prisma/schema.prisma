@@ -487,3 +487,46 @@ model StudentHistory {
   @@index([originalStudentId])
 }
 
+// =====================
+// Communication: Appointments & Chat
+// =====================
+
+model Appointment {
+  id          String   @id @default(cuid())
+  studentId   String
+  teacherId   String
+  schoolId    String
+  requestedAt DateTime @default(now())
+  scheduledAt DateTime?
+  status      String   @default("PENDING") // "PENDING", "APPROVED", "REJECTED", "COMPLETED"
+  note        String?  @db.Text
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacher User    @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  school  School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  messages ChatMessage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId])
+  @@index([teacherId])
+  @@index([schoolId])
+  @@index([status])
+}
+
+model ChatMessage {
+  id            String   @id @default(cuid())
+  appointmentId String
+  senderId      String
+  content       String   @db.Text
+  createdAt     DateTime @default(now())
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  sender      User        @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([appointmentId])
+  @@index([senderId])
+}
+
