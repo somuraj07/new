@@ -42,11 +42,6 @@ export default function Home() {
               Payments & Fees
             </div>
           </Link>
-          <Link href="/communication" className="block">
-            <div className="w-full py-4 rounded-2xl bg-teal-500 text-white text-lg font-semibold text-center hover:bg-teal-600 transition shadow-md">
-              Communication
-            </div>
-          </Link>
         </div>
         
 
