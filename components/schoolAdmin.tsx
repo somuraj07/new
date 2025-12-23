@@ -84,7 +84,7 @@ export default function HomePage() {
       </aside>
 
       {/* MAIN CONTENT */}
-      <main className="flex-1 p-8 overflow-hidden">
+      <main className="flex-1 overflow-hidden p-0 m-0">
         <AnimatePresence mode="wait">
           <motion.div
             key={active.id}
@@ -92,20 +92,10 @@ export default function HomePage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.35 }}
-            className="bg-white rounded-2xl shadow-xl border border-green-200 h-full overflow-hidden"
+            className="bg-white h-full w-full overflow-hidden p-0 m-0 rounded-none shadow-none"
           >
-            {/* HEADER */}
-            <div className="p-8 border-b border-green-100">
-              <h2 className="text-3xl font-bold text-green-700">
-                {active.label}
-              </h2>
-              <p className="text-gray-600">
-                Manage <span className="font-semibold">{active.label}</span> here.
-              </p>
-            </div>
-
             {/* CONTENT AREA */}
-            <div className="p-8 h-full">
+            <div className="h-full w-full p-0 m-0">
               {renderContent(active.id)}
             </div>
           </motion.div>
@@ -121,38 +111,28 @@ function renderContent(section: string) {
   switch (section) {
     case "classes":
       return <Classes />
-
     case "students":
       return <Students />
-
     case "teachers":
       return <Teachers />
-
     case "school":
       return <SchoolDetails />
-
     case "tc":
       return <TCRequests />
-
     case "payments":
       return <Payments />
-
     case "newsfeed":
       return <NewsFeed />
-
     case "events":
       return <Events />
-
     case "leave":
       return <LeaveApplications />
-
     default:
       return <ComingSoon />
   }
 }
 
-/* ---------------- PLACEHOLDER PAGES ---------------- */
-/* YOU WILL REPLACE CONTENT MANUALLY */
+/* ---------------- PAGE WRAPPERS ---------------- */
 
 function Classes() {
   return (
@@ -171,7 +151,7 @@ function Students() {
 }
 
 function Teachers() {
-  return(
+  return (
     <RequireRole allowedRoles={["SCHOOLADMIN"]}>
       <TeacherSignupPage />
     </RequireRole>
@@ -226,32 +206,12 @@ function LeaveApplications() {
   )
 }
 
-/* ---------------- COMMON UI ---------------- */
-
-function Section({ title }: { title: string }) {
-  return (
-    <div className="flex items-center justify-center h-full">
-      <div className="text-center">
-        <h3 className="text-2xl font-semibold text-gray-700 mb-2">
-          {title}
-        </h3>
-        <p className="text-gray-500">
-          Replace this section with your actual component.
-        </p>
-      </div>
-    </div>
-  )
-}
+/* ---------------- FALLBACK ---------------- */
 
 function ComingSoon() {
   return (
-    <div className="text-center py-20">
-      <h3 className="text-2xl font-semibold text-gray-700 mb-4">
-        🚧 Coming Soon
-      </h3>
-      <p className="text-gray-500">
-        Feature under development.
-      </p>
+    <div className="h-full w-full flex items-center justify-center">
+      <p className="text-gray-500">🚧 Feature under development</p>
     </div>
   )
 }

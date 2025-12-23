@@ -26,6 +26,8 @@ import EventsPage from "./Events"
 import CommunicationPage from "@/app/communication/page"
 import TeacherLeavesPage from "./teacherleave"
 
+/* ---------------- SIDEBAR ACTIONS ---------------- */
+
 const actions = [
   { id: "marks-entry", label: "Marks Entry", icon: ClipboardList },
   { id: "marks-view", label: "Marks View", icon: Eye },
@@ -39,11 +41,13 @@ const actions = [
   { id: "leaves", label: "Leaves Management", icon: Calendar },
 ]
 
+/* ---------------- MAIN PAGE ---------------- */
+
 export default function TeachersPage() {
   const [active, setActive] = useState(actions[0])
 
   return (
-    <div className="flex min-h-screen bg-green-50">
+    <div className="flex min-h-screen bg-green-50 m-0 p-0">
       {/* SIDEBAR */}
       <aside className="w-72 bg-white border-r border-green-200 shadow-lg">
         <div className="p-6 border-b border-green-200">
@@ -80,7 +84,7 @@ export default function TeachersPage() {
       </aside>
 
       {/* MAIN CONTENT */}
-      <main className="flex-1 p-8 overflow-hidden">
+      <main className="flex-1 overflow-hidden m-0 p-0">
         <AnimatePresence mode="wait">
           <motion.div
             key={active.id}
@@ -88,20 +92,11 @@ export default function TeachersPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.35 }}
-            className="bg-white rounded-2xl shadow-xl border border-green-200 overflow-hidden h-full"
+            className="bg-white h-full w-full overflow-hidden m-0 p-0 rounded-none shadow-none"
           >
-            {/* HEADER (padding only here) */}
-            <div className="p-8 border-b border-green-100">
-              <h2 className="text-3xl font-bold text-green-700">
-                {active.label}
-              </h2>
-              <p className="text-gray-600">
-                Manage <span className="font-semibold">{active.label}</span> here.
-              </p>
-            </div>
 
-            {/* CONTENT AREA (NO padding, NO border) */}
-            <div className="h-full">
+            {/* CONTENT AREA */}
+            <div className="h-full w-full m-0 p-0">
               {renderContent(active.id)}
             </div>
           </motion.div>
@@ -232,14 +227,13 @@ function Leaves() {
   )
 }
 
+/* ---------------- FALLBACK ---------------- */
+
 function ComingSoon() {
   return (
-    <div className="text-center py-20">
-      <h3 className="text-2xl font-semibold text-gray-700 mb-4">
-        🚧 Coming Soon!
-      </h3>
+    <div className="h-full w-full flex items-center justify-center">
       <p className="text-gray-500">
-        This feature is under development. Stay tuned!
+        🚧 Feature under development
       </p>
     </div>
   )
