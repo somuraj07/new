@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
-import io, { type Socket } from "socket.io-client";
+import io from "socket.io-client";
+import { motion, AnimatePresence } from "framer-motion";
 
 type AppointmentStatus = "PENDING" | "APPROVED" | "REJECTED" | "COMPLETED";
 
@@ -30,75 +31,98 @@ interface TeacherLite {
 
 export default function CommunicationPage() {
   const { data: session, status } = useSession();
+
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [selected, setSelected] = useState<Appointment | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [teachers, setTeachers] = useState<TeacherLite[]>([]);
-  const [selectedTeacherId, setSelectedTeacherId] = useState<string>("");
+  const [selectedTeacherId, setSelectedTeacherId] = useState("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
-  // Use a loose type here to avoid build-time type issues on Vercel; runtime logic stays the same.
+
   const socketRef = useRef<any>(null);
-  const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001";
+  const bottomRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    const socketInstance = io(socketUrl);
-    socketRef.current = socketInstance;
-    return () => {
-      socketInstance.disconnect();
-      socketRef.current = null;
-    };
-  }, [socketUrl]);
+  const socketUrl =
+    process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001";
 
+  /* ================= SOCKET CONNECT ================= */
   useEffect(() => {
     if (status !== "authenticated") return;
-    const fetchAppointments = async () => {
-      const res = await fetch("/api/communication/appointments");
-      if (!res.ok) return;
-      const data = await res.json();
-      setAppointments(data.appointments || []);
+
+    const socket = io(socketUrl, {
+      transports: ["websocket"],
+    });
+
+    socketRef.current = socket;
+
+    return () => {
+      socket.disconnect();
+      socketRef.current = null;
     };
-    fetchAppointments();
+  }, [socketUrl, status]);
+
+  /* ================= FETCH APPOINTMENTS ================= */
+  useEffect(() => {
+    if (status !== "authenticated") return;
+
+    fetch("/api/communication/appointments")
+      .then((res) => res.json())
+      .then((data) => setAppointments(data.appointments || []));
 
     if (session?.user?.role === "STUDENT") {
       fetch("/api/teacher/list")
         .then((res) => res.json())
-        .then((data) => setTeachers(data.teachers || []))
-        .catch(() => setTeachers([]));
+        .then((data) => setTeachers(data.teachers || []));
     }
-  }, [status]);
+  }, [status, session?.user?.role]);
 
+  /* ================= JOIN ROOM + REALTIME ================= */
   useEffect(() => {
-    if (!selected) return;
+    if (!selected || !socketRef.current) return;
 
     const roomId = selected.id;
-    socketRef.current?.emit("join-room", roomId);
 
-    const handler = (message: ChatMessage) => {
-      setMessages((prev) => [...prev, message]);
+    socketRef.current.emit("join-room", roomId);
+
+    const handler = (msg: ChatMessage) => {
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === msg.id)) return prev;
+        return [...prev, msg];
+      });
     };
 
-    socketRef.current?.on("receive-message", handler);
+    socketRef.current.on("receive-message", handler);
 
-    const fetchMessages = async () => {
-      const res = await fetch(
-        `/api/communication/messages?appointmentId=${roomId}`
-      );
-      if (!res.ok) return;
-      const data = await res.json();
-      setMessages(data.messages || []);
-    };
-
-    fetchMessages();
+    // Fetch initial messages (merge, don't override)
+    fetch(`/api/communication/messages?appointmentId=${roomId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setMessages((prev) => {
+          const map = new Map(prev.map((m) => [m.id, m]));
+          (data.messages || []).forEach((m: ChatMessage) =>
+            map.set(m.id, m)
+          );
+          return Array.from(map.values());
+        });
+      });
 
     return () => {
-      socketRef.current?.off("receive-message", handler);
+      socketRef.current.emit("leave-room", roomId);
+      socketRef.current.off("receive-message", handler);
     };
   }, [selected]);
 
+  /* ================= AUTO SCROLL ================= */
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  /* ================= ACTIONS ================= */
   const sendMessage = async () => {
-    if (!selected || !newMessage.trim() || selected.status !== "APPROVED") return;
+    if (!selected || !newMessage.trim() || selected.status !== "APPROVED")
+      return;
 
     const res = await fetch("/api/communication/messages", {
       method: "POST",
@@ -113,15 +137,18 @@ export default function CommunicationPage() {
 
     const msg: ChatMessage = await res.json();
     setNewMessage("");
+
     setMessages((prev) => [...prev, msg]);
-    socketRef.current?.emit("send-message", { roomId: selected.id, message: msg });
+
+    socketRef.current?.emit("send-message", {
+      roomId: selected.id,
+      message: msg,
+    });
   };
 
   const createAppointment = async () => {
-    if (!selectedTeacherId) {
-      alert("Select a teacher to book an appointment");
-      return;
-    }
+    if (!selectedTeacherId) return alert("Select a teacher");
+
     setSaving(true);
     try {
       const res = await fetch("/api/communication/appointments", {
@@ -130,183 +157,184 @@ export default function CommunicationPage() {
         body: JSON.stringify({ teacherId: selectedTeacherId, note }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        alert(data.message || "Failed to request appointment");
-        return;
-      }
-      setAppointments((prev) => [data.appointment, ...prev]);
+      if (!res.ok) return alert(data.message);
+      setAppointments((p) => [data.appointment, ...p]);
       setNote("");
     } finally {
       setSaving(false);
     }
   };
 
-  const approveAppointment = async (appointmentId: string) => {
+  const approveAppointment = async (id: string) => {
     setSaving(true);
     try {
-      const res = await fetch(`/api/communication/appointments/${appointmentId}/approve`, {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.message || "Failed to approve");
-        return;
-      }
-      setAppointments((prev) =>
-        prev.map((a) => (a.id === appointmentId ? { ...a, status: "APPROVED" } : a))
+      const res = await fetch(
+        `/api/communication/appointments/${id}/approve`,
+        { method: "POST" }
       );
-      if (selected?.id === appointmentId) {
+      if (!res.ok) return;
+
+      setAppointments((p) =>
+        p.map((a) => (a.id === id ? { ...a, status: "APPROVED" } : a))
+      );
+
+      if (selected?.id === id)
         setSelected({ ...selected, status: "APPROVED" });
-      }
     } finally {
       setSaving(false);
     }
   };
 
-  if (status === "loading") {
+  if (status === "loading")
     return (
-      <div className="min-h-screen flex items-center justify-center bg-green-50">
-        <p className="text-green-700">Loading communication...</p>
+      <div className="h-screen grid place-items-center bg-gray-100 text-green-700">
+        Loading chat…
       </div>
     );
-  }
 
-  if (!session?.user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-green-50">
-        <p className="text-red-600 font-semibold">You need to sign in to view communications.</p>
-      </div>
-    );
-  }
+  const role = session?.user?.role;
 
-  const role = session.user.role;
-  if (role !== "STUDENT" && role !== "TEACHER") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-green-50">
-        <p className="text-red-600 font-semibold">
-          Communication is available only between students and teachers.
-        </p>
-      </div>
-    );
-  }
-
+  /* ================= UI ================= */
   return (
-    <div className="p-6 mx-auto bg-green-50 min-h-screen flex gap-6">
-      <div className="w-1/3 bg-white rounded-xl shadow p-4 space-y-3">
-        <h2 className="text-xl font-bold text-green-800">Appointments</h2>
+    <div className="h-screen flex bg-[#f0f2f5]">
+      {/* SIDEBAR */}
+      <div className="w-[360px] bg-white border-r flex flex-col">
+        <div className="px-4 py-3 border-b">
+          <h2 className="text-lg font-semibold text-green-700">
+            Appointments
+          </h2>
+        </div>
+
         {role === "STUDENT" && (
-          <div className="space-y-2 border rounded-lg p-3">
-            <p className="text-sm font-semibold text-green-700">Request Appointment</p>
+          <div className="p-3 space-y-2 border-b">
             <select
               value={selectedTeacherId}
               onChange={(e) => setSelectedTeacherId(e.target.value)}
-              className="w-full border rounded-lg px-2 py-2 text-sm"
+              className="w-full border rounded-lg px-3 py-2 text-sm"
             >
-              <option value="">Select teacher</option>
+              <option value="">Select Teacher</option>
               {teachers.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.name || t.email || "Teacher"}
+                  {t.name || t.email}
                 </option>
               ))}
             </select>
+
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Add a note (optional)"
-              className="w-full border rounded-lg px-2 py-2 text-sm"
+              placeholder="Optional note"
               rows={2}
+              className="w-full border rounded-lg p-2 text-sm"
             />
+
             <button
               onClick={createAppointment}
-              disabled={saving}
-              className="w-full bg-green-600 text-white text-sm rounded-lg py-2 hover:bg-green-700 disabled:opacity-60"
+              className="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg text-sm"
             >
-              {saving ? "Submitting..." : "Send Request"}
+              Request Appointment
             </button>
           </div>
         )}
-        {appointments.length === 0 && (
-          <p className="text-gray-500 text-sm">No appointments yet.</p>
-        )}
-        {appointments.map((appt) => (
-          <button
-            key={appt.id}
-            onClick={() => setSelected(appt)}
-            className={`w-full text-left p-3 rounded-lg border text-sm mb-2 ${
-              selected?.id === appt.id
-                ? "border-green-600 bg-green-50"
-                : "border-gray-200 hover:border-green-400"
-            }`}
-          >
-            <div className="font-medium text-green-800">
-              Appointment #{appt.id.slice(0, 6)}
-            </div>
-            <div className="text-xs text-gray-500">Status: {appt.status}</div>
-            {role === "TEACHER" && appt.status !== "APPROVED" && (
-              <div className="mt-2 flex gap-2">
+
+        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          {appointments.map((a) => (
+            <motion.button
+              key={a.id}
+              whileHover={{ scale: 1.01 }}
+              onClick={() => setSelected(a)}
+              className={`w-full text-left px-3 py-3 rounded-lg transition ${
+                selected?.id === a.id
+                  ? "bg-green-50 border border-green-500"
+                  : "hover:bg-gray-100"
+              }`}
+            >
+              <div className="font-medium text-sm">
+                Appointment #{a.id.slice(0, 6)}
+              </div>
+              <div className="text-xs text-gray-500">{a.status}</div>
+
+              {role === "TEACHER" && a.status !== "APPROVED" && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    approveAppointment(appt.id);
+                    approveAppointment(a.id);
                   }}
-                  disabled={saving}
-                  className="text-xs bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 disabled:opacity-60"
+                  className="mt-2 text-xs bg-green-600 text-white px-3 py-1 rounded"
                 >
                   Approve
                 </button>
-              </div>
-            )}
-          </button>
-        ))}
+              )}
+            </motion.button>
+          ))}
+        </div>
       </div>
 
-      <div className="flex-1 bg-white rounded-xl shadow p-4 flex flex-col">
+      {/* CHAT */}
+      <div className="flex-1 flex flex-col">
         {selected ? (
           <>
-            <h2 className="text-xl font-bold text-green-800 mb-2">
-              Chat for Appointment #{selected.id.slice(0, 6)}
-            </h2>
-            {selected.status !== "APPROVED" && (
-              <div className="mb-3 text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2">
-                Chat unlocks after the teacher approves this appointment.
-              </div>
-            )}
-            <div className="flex-1 border rounded-lg p-3 mb-3 overflow-y-auto space-y-2 bg-green-50">
-              {messages.map((m) => (
-                <div
-                  key={m.id}
-                  className="bg-white rounded-lg px-3 py-2 shadow-sm text-sm"
-                >
-                  <div className="text-[10px] text-gray-400 mb-1">
-                    {new Date(m.createdAt).toLocaleTimeString()}
-                  </div>
-                  <div>{m.content}</div>
-                </div>
-              ))}
-              {messages.length === 0 && (
-                <p className="text-xs text-gray-500">No messages yet.</p>
-              )}
+            <div className="h-14 bg-white border-b px-4 flex items-center font-medium text-green-700">
+              Appointment #{selected.id.slice(0, 6)}
             </div>
-            <div className="flex gap-2">
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-[#efeae2]">
+              <AnimatePresence>
+                {messages.map((m) => {
+                  const mine = m.senderId === session?.user?.id;
+
+                  return (
+                    <motion.div
+                      key={m.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={`flex ${
+                        mine ? "justify-end" : "justify-start"
+                      }`}
+                    >
+                      <div
+                        className={`max-w-[70%] border rounded-lg px-4 py-3 shadow-sm ${
+                          mine
+                            ? "bg-green-50 border-green-500"
+                            : "bg-white border-gray-300"
+                        }`}
+                      >
+                        <div className="text-sm text-gray-800 whitespace-pre-wrap">
+                          {m.content}
+                        </div>
+                        <div className="text-[10px] text-right text-gray-500 mt-2">
+                          {new Date(m.createdAt).toLocaleTimeString()}
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+
+              <div ref={bottomRef} />
+            </div>
+
+            <div className="h-16 bg-white border-t px-4 flex items-center gap-2">
               <input
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
                 disabled={selected.status !== "APPROVED"}
-                className="flex-1 border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
-                placeholder="Type a message..."
+                placeholder="Type a message"
+                className="flex-1 border rounded-full px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-green-500"
               />
-              <button
+              <motion.button
+                whileTap={{ scale: 0.9 }}
                 onClick={sendMessage}
                 disabled={selected.status !== "APPROVED"}
-                className="bg-green-600 hover:bg-green-700 text-white px-4 rounded-lg text-sm font-semibold disabled:opacity-60"
+                className="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-full text-sm"
               >
                 Send
-              </button>
+              </motion.button>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">
-            Select an appointment to start chatting.
+          <div className="flex-1 grid place-items-center text-gray-500">
+            Select an appointment to start chatting
           </div>
         )}
       </div>
