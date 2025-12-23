@@ -11,6 +11,7 @@ const actions = [
   { label: "Homeworks", href: "/homework" },
   { label: "News Feed", href: "/newsfeed" },
   { label: "communication", href: "/communication" },
+  { label: "leaves", href: "/leaves" },
 ];
 
 export default function TeachersPage() {

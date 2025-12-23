@@ -42,6 +42,21 @@ export default function Home() {
               Payments & Fees
             </div>
           </Link>
+          <Link href="/newsfeed" className="block">
+            <div className="w-full py-4 rounded-2xl bg-emerald-500 text-white text-lg font-semibold text-center hover:bg-emerald-600 transition shadow-md">
+              Newsfeed
+            </div>
+          </Link>
+          <Link href="/events" className="block">
+            <div className="w-full py-4 rounded-2xl bg-emerald-500 text-white text-lg font-semibold text-center hover:bg-emerald-600 transition shadow-md">
+              Events
+            </div>
+          </Link>
+          <Link href="/leave" className="block">
+            <div className="w-full py-4 rounded-2xl bg-emerald-500 text-white text-lg font-semibold text-center hover:bg-emerald-600 transition shadow-md">
+              Leave Applications
+            </div>
+          </Link>
         </div>
         
 
